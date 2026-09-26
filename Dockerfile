@@ -42,13 +42,12 @@ RUN python -c "import sys; sys.path.extend(['/app/CosyVoice', '/app/CosyVoice/th
 # CosyVoice-BlankEN LLM backbone its own cosyvoice3.yaml requires).
 ARG MODEL_ID=computeram/cosyvoice3-badini-tts
 ENV MODEL_ID=${MODEL_ID}
-RUN python - << 'PYEOF'
-import os
-from huggingface_hub import snapshot_download
-model_id = os.environ.get("MODEL_ID")
-path = snapshot_download(model_id, local_dir="/app/model")
-print(f"Downloaded {model_id} to {path}")
-PYEOF
+# HF_TOKEN comes from a BuildKit secret (not a build arg), so it never ends up
+# in this public image's layers/history. Anonymous downloads from shared CI
+# runners hit Hugging Face's rate limit (HTTP 429) — that failed build #2.
+COPY download_model.py .
+RUN --mount=type=secret,id=hf_token,required=false \
+    HF_TOKEN="$(cat /run/secrets/hf_token 2>/dev/null || true)" python download_model.py
 
 # Bundled reference voice: a real Badini recording + its exact transcript.
 # CosyVoice3 is a zero-shot cloning model, so every generation needs a

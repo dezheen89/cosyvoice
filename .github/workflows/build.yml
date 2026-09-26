@@ -47,6 +47,8 @@ jobs:
             dezheen89/cosyvoice:v1
           build-args: |
             MODEL_ID=computeram/cosyvoice3-badini-tts
+          secrets: |
+            hf_token=${{ secrets.HF_TOKEN }}
 
       - name: Print result
         run: |
