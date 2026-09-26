@@ -27,7 +27,14 @@ COPY requirements.txt .
 # scripts, the gRPC/FastAPI server, and TensorRT acceleration (load_trt=True,
 # which we never set). The import check below fails the build if that turns
 # out to be wrong for any module the model actually pulls in.
-RUN pip install --default-timeout=200 -r requirements.txt
+# openai-whisper (and possibly other sdist-only packages) build from source,
+# and their setup.py imports pkg_resources — which the newest setuptools no
+# longer ships, and pip's isolated build env always pulls the newest one
+# (this failed the first CI build). Pin a setuptools that still has it plus
+# the build tools sdists need (pyworld wants cython+numpy), then build
+# without isolation so those are the ones used.
+RUN pip install "setuptools<81" wheel cython numpy==1.26.4
+RUN pip install --no-build-isolation --default-timeout=200 -r requirements.txt
 
 RUN python -c "import sys; sys.path.extend(['/app/CosyVoice', '/app/CosyVoice/third_party/Matcha-TTS']); import runpod; from cosyvoice.cli.cosyvoice import AutoModel; print('import check ok')"
 
