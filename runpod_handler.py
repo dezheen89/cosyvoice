@@ -18,6 +18,7 @@ import base64
 import io
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -140,13 +141,34 @@ def handler(job):
 
         buf = io.BytesIO()
         torchaudio.save(buf, speech, cosy.sample_rate, format="wav")
-        audio_b64 = base64.b64encode(buf.getvalue()).decode()
+        wav_bytes = buf.getvalue()
+
+        # RunPod's serverless result payload has a hard ~20MB ceiling — a few
+        # minutes of raw 24kHz WAV lands right at that edge (confirmed: a
+        # 351s generation's job completed but its output never came back).
+        # Opus at 32kbps is comfortably smaller (~10-20x) for the same speech
+        # at any realistic length, so transcode via the ffmpeg already baked
+        # into this image rather than ship the raw WAV.
+        audio_bytes, audio_format = wav_bytes, "wav"
+        try:
+            proc = subprocess.run(
+                ["ffmpeg", "-y", "-i", "pipe:0", "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", "pipe:1"],
+                input=wav_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60,
+            )
+            if proc.returncode == 0 and proc.stdout:
+                audio_bytes, audio_format = proc.stdout, "ogg"
+            else:
+                print("[WARN] ffmpeg opus encode failed, falling back to wav:", proc.stderr.decode(errors="replace")[-500:], flush=True)
+        except Exception:
+            print("[WARN] ffmpeg opus encode raised, falling back to wav:\n" + traceback.format_exc(), flush=True)
+
+        audio_b64 = base64.b64encode(audio_bytes).decode()
 
         return {
             "ok": True,
             "audio_base64": audio_b64,
             "sample_rate": cosy.sample_rate,
-            "format": "wav",
+            "format": audio_format,
             "inference_ms": inference_ms,
         }
     except Exception:
