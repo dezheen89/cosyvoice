@@ -8,8 +8,8 @@ on:
       - "Dockerfile"
       - "requirements.txt"
       - "runpod_handler.py"
-      - "prompt-hayfa.wav"
-      - "prompt-hayfa.txt"
+      - "prompt-*.wav"
+      - "prompt-*.txt"
       - ".github/workflows/build.yml"
   workflow_dispatch:
 

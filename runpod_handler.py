@@ -6,10 +6,18 @@ on Badini Kurdish speech data). Zero-shot voice cloning — every generation
 needs a reference audio clip + its exact transcript. This checkpoint ships
 no reference audio of its own, so a bundled default (prompt-hayfa.wav/.txt,
 a real Badini recording reused from Dezheen89/omnivoice-badini) is used
-unless the caller supplies their own via ref_audio/ref_text.
+unless the caller supplies their own via ref_audio/ref_text, or picks one
+of the bundled emotion references below by name.
+
+The emotion references are real labeled clips (same Hayfa speaker) from a
+Badini emotional-speech dataset — CosyVoice3 has no explicit emotion
+conditioning, so "emotion" here just selects which real recording of this
+speaker actually saying something in that emotional register is used as the
+zero-shot clone target, which is the only way this model expresses it.
 
 Input:
-    {"text": "...", "ref_audio": "<base64 wav>"?, "ref_text": "..."?, "speed": 1.0?}
+    {"text": "...", "emotion": "natural"|"angry"|"sad"|"happy"|"fear"|"surprise"?,
+     "ref_audio": "<base64 wav>"?, "ref_text": "..."?, "speed": 1.0?}
 Output:
     {"ok": true, "audio_base64": "...", "sample_rate": N, "format": "wav"}
 """
@@ -40,6 +48,21 @@ DEFAULT_INSTRUCT = "You are a helpful assistant.<|endofprompt|>"
 
 with open(DEFAULT_REF_TXT, encoding="utf-8") as f:
     DEFAULT_REF_TEXT = f.read().strip()
+
+# Bundled per-emotion reference clips (see module docstring). Each maps to a
+# (wav_path, text) pair, loaded once at startup; "natural" reuses the
+# original default reference rather than a separate file.
+EMOTION_FILES = {
+    "angry": "/app/prompt-angry",
+    "sad": "/app/prompt-sad",
+    "happy": "/app/prompt-happy",
+    "fear": "/app/prompt-fear",
+    "surprise": "/app/prompt-surprise",
+}
+EMOTION_REFS = {"natural": (DEFAULT_REF_WAV, DEFAULT_REF_TEXT)}
+for _emotion, _base in EMOTION_FILES.items():
+    with open(f"{_base}.txt", encoding="utf-8") as _f:
+        EMOTION_REFS[_emotion] = (f"{_base}.wav", _f.read().strip())
 
 _model = None
 _lock = threading.Lock()
@@ -103,9 +126,13 @@ def handler(job):
         if not text:
             return {"ok": False, "error": "Missing 'text' in input."}
 
-        ref_wav = DEFAULT_REF_WAV
-        ref_text = DEFAULT_REF_TEXT
+        emotion = input_data.get("emotion") or "natural"
+        if emotion not in EMOTION_REFS:
+            return {"ok": False, "error": f"Unknown emotion '{emotion}'. Valid: {sorted(EMOTION_REFS)}."}
+        ref_wav, ref_text = EMOTION_REFS[emotion]
 
+        # An explicit custom reference still overrides the emotion pick —
+        # emotion selection only matters when the caller didn't supply one.
         ref_audio_b64 = input_data.get("ref_audio")
         if ref_audio_b64:
             ref_text_in = input_data.get("ref_text")

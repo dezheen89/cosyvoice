@@ -49,10 +49,12 @@ COPY download_model.py .
 RUN --mount=type=secret,id=hf_token,required=false \
     HF_TOKEN="$(cat /run/secrets/hf_token 2>/dev/null || true)" python download_model.py
 
-# Bundled reference voice: a real Badini recording + its exact transcript.
+# Bundled reference voices: real Badini recordings + their exact transcripts,
+# one per emotion plus the original neutral "natural" default (prompt-hayfa).
 # CosyVoice3 is a zero-shot cloning model, so every generation needs a
-# reference clip; callers can override it with ref_audio/ref_text.
-COPY prompt-hayfa.wav prompt-hayfa.txt /app/
+# reference clip; callers can override it with ref_audio/ref_text, or select
+# one of these bundled ones by name via the "emotion" field.
+COPY prompt-*.wav prompt-*.txt /app/
 
 COPY runpod_handler.py .
 
