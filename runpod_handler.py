@@ -108,14 +108,19 @@ def chunk_text(text, soft_words=CHUNK_SOFT_WORDS, hard_words=CHUNK_HARD_WORDS):
     return chunks
 
 
-def get_model():
-    global _model
-    if _model is None:
-        with _lock:
-            if _model is None:
-                print(f"[LOAD] Loading CosyVoice3 from {MODEL_DIR}...", flush=True)
-                _model = AutoModel(model_dir=MODEL_DIR)
-                print("[LOAD] Model ready.", flush=True)
+_model_fp16 = None
+
+
+def get_model(fp16=False):
+    global _model, _model_fp16
+    with _lock:
+        if _model is None or _model_fp16 != fp16:
+            _model = None
+            torch.cuda.empty_cache()
+            print(f"[LOAD] Loading CosyVoice3 from {MODEL_DIR} (fp16={fp16})...", flush=True)
+            _model = AutoModel(model_dir=MODEL_DIR, fp16=fp16)
+            _model_fp16 = fp16
+            print("[LOAD] Model ready.", flush=True)
     return _model
 
 
@@ -147,7 +152,7 @@ def handler(job):
         speed = float(input_data.get("speed", 1.0))
         speed = max(0.5, min(2.0, speed))
 
-        cosy = get_model()
+        cosy = get_model(fp16=bool(input_data.get("fp16", False)))
         prompt = DEFAULT_INSTRUCT + ref_text
 
         t0 = time.perf_counter()
